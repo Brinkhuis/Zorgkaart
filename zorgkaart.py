@@ -182,6 +182,50 @@ def merge_datasets(organisatietype, delete=False):
     return dataset
 
 
+def get_wachttijden(organisatietype):
+    if f'{organisatietype}.csv' in os.listdir('data'):
+        instelling = pd.read_csv(os.path.join('data', f'{organisatietype}.csv'))
+    elif f'{organisatietype}_details.csv' in os.listdir('data'):
+        instelling = pd.read_csv(os.path.join('data', f'{organisatietype}_details.csv'))
+    else:
+        raise Exception('Geen bestanden voor organisatietype {} gevonden'.format(organisatietype))
+    
+    instelling = instelling.loc[pd.notnull(instelling.wachttijden_url), ['id', 'zorginstelling', 'wachttijden_url']]
+    
+    if instelling.shape[0] != 0:
+        wachttijden = pd.DataFrame()
+    
+        for row in instelling.iterrows():
+            row_values = row[1]
+            r = requests.get(row_values.wachttijden_url)
+            soup = BeautifulSoup(r.content, 'html.parser')
+            specialismen = soup.find('ul', {'class': 'striped_box certificates_table'}).find_all('li')
+            for specialisme in specialismen:
+            
+                wachttijd = specialisme.find('div', {'class': 'right_media_holder'}).text.strip()
+                if wachttijd in ['-']:
+                    wachttijd = np.nan
+                else:
+                    wachttijd = int(wachttijd.split()[0])
+                
+                specialisme = specialisme.find('div', {'class': 'media-body'}).text.strip()
+            
+                table_row = [row_values.id, row_values.zorginstelling, specialisme, wachttijd]
+            
+                wachttijden = wachttijden.append(pd.Series(table_row), ignore_index=True)
+    
+        wachttijden.columns = ['id', 'zorginstelling', 'specialisme', 'wachttijd']
+        wachttijden.id = wachttijden.id.astype(int)
+        wachttijden.dropna(inplace=True)
+        wachttijden.wachttijd = wachttijden.wachttijd.astype(int)
+        
+        wachttijden.to_csv(os.path.join('data', f'{organisatietype}_wachttijden.csv'), index=False)
+
+        return wachttijden
+    else:
+        print(f'Geen wachttijden gevonden voor organisatietype {organisatietype}')
+
+
 if __name__ == '__main__':
     import sys
     get_info(sys.argv[1])
