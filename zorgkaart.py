@@ -114,8 +114,6 @@ def get_details(organisatietype, reasonable_rate = 3):
     # set base_url
     base_url = 'https://www.zorgkaartnederland.nl'
     
-    # get organisatietype_id
-    organisatietype_id = get_typeid(organisatietype)
     
     # read data
     instelling = read_info(organisatietype)
@@ -215,7 +213,7 @@ def get_wachttijden(organisatietype, reasonable_rate = 3):
     if f'{filename}.csv' in os.listdir('data'):
         instelling = pd.read_csv(os.path.join('data', f'{filename}.csv'))
     elif f'{filename}_details.csv' in os.listdir('data'):
-        instelling = pd.read_csv(os.path.join('data', f'{fielename}_details.csv'))
+        instelling = pd.read_csv(os.path.join('data', f'{filename}_details.csv'))
     else:
         raise Exception('Geen bestanden voor organisatietype {} gevonden'.format(organisatietype))
     
