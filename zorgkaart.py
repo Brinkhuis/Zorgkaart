@@ -20,32 +20,29 @@ def get_types():
     aantal = [int(item.span.text.strip('()')) for item in items]
     url = [item['href'] for item in items]
     
-    return pd.DataFrame({'organisatie': organisatietype,
+    return pd.DataFrame({'organisatietype': organisatietype,
                          'aantal': aantal,
-                         'url': url}).set_index('url')
-
-
-def get_typeid(organisatietype):
-    all_types = get_types()
-    return all_types.loc[all_types['organisatietype'] == organisatietype].index[0]
+                         'url': url}).set_index('organisatietype')
 
 
 def get_info(organisatietype, reasonable_rate = 3):
-
+    
     # set base_url
     base_url = 'https://www.zorgkaartnederland.nl'
     
-    # get organisatietype_id
-    organisatietype_id = get_typeid(organisatietype)
-
+    # get url
+    url = get_types().at[organisatietype, 'url']
+    
     # pagination
-    r = requests.get(f'{base_url}/{organisatietype_id}')
+    r = requests.get(base_url + url)
     soup = BeautifulSoup(r.content, 'html.parser')
-    pagination = soup.find('div', {'class': 'pagination_holder'})
-    if len(pagination.find_all('li')) == 0:
+    pagination = soup.find('nav', {'aria-label': 'Page navigation'})
+    
+    if pagination is None:
         pages = 1
     else:
-        pages = int(pagination.find_all('li')[-1].text.strip())
+        page_items = pagination.find_all('li', {'class': 'page-item'})
+        pages = int(page_items[-1].a.text)
 
     # expected number of datapoints
     datapoints_expected = int(soup.title.text.split()[0])
@@ -56,41 +53,39 @@ def get_info(organisatietype, reasonable_rate = 3):
     # scrape pages
     for page in tqdm(range(1, pages + 1)):
         
-        r = requests.get(f'{base_url}/{organisatietype_id}/pagina{page}')
+        r = requests.get(f'{base_url}{url}/pagina{page}')
         soup = BeautifulSoup(r.content, 'html.parser')
-        locaties = soup.find_all('li', {'class': 'media'})
+        locaties = soup.find_all('div', {'class': 'filter-result'})
 
         for locatie in locaties:
             
+            zorginstelling = locatie['data-title']
+            plaats = locatie.find('div', {'class', 'filter-result__places'}).text.strip()
+            beoordeling = locatie.find('div', {'class', 'filter-result__score'}).text.strip()
+            waarderingen = locatie.find_all('p')[-1].text.strip().split()[0]
             latitude = float(locatie['data-location'].split(',')[0])
             longitude = float(locatie['data-location'].split(',')[1])
-            zorginstelling = locatie.a['title']
             zknl_url = base_url + locatie.a['href']
-            identifier = int(locatie.a['href'].split('-')[-1])
-            beoordeling = locatie.find_all('div')[1].div.text
-            waarderingen = locatie.find('span', {'class': 'rating_value'}).text
-            categorie = locatie.find('p', {'class': 'description'}).text
-            plaats = locatie.find('span', {'class': 'context'}).text
             
-            table_row = [identifier, zorginstelling, plaats, beoordeling, waarderingen, categorie, latitude, longitude, zknl_url]
+            table_row = [zorginstelling, plaats, beoordeling, waarderingen, latitude, longitude, zknl_url]
             instelling = instelling.append(pd.Series(table_row), ignore_index=True)
         
-        if reasonable_rate:
-            sleep(randint(1, reasonable_rate)) 
+        #if reasonable_rate:
+        #    sleep(randint(1, reasonable_rate)) 
 
     # post processing
-    instelling.columns = ['id', 'zorginstelling', 'plaats', 'beoordeling', 'waarderingen', 'categorie', 'latitude', 'longitude', 'zknl_url']
-    instelling.id = instelling.id.astype(int)
-    instelling.waarderingen = instelling.waarderingen.astype(int)
+    instelling.columns = ['zorginstelling', 'plaats', 'beoordeling', 'waarderingen', 'latitude', 'longitude', 'zknl_url']
+    instelling.waarderingen = instelling.waarderingen.astype(float)
     instelling.beoordeling.replace('-', np.nan, inplace=True)
     instelling.beoordeling = instelling.beoordeling.astype(float)
-    instelling.set_index('id', drop=True, inplace=True, verify_integrity=True)
+    instelling.latitude = instelling.latitude.astype(float)
+    instelling.longitude = instelling.longitude.astype(float)
 
     # save data
     if not os.path.isdir('data'):
         os.mkdir('data')
     filename = organisatietype.lower().replace('-', '_').replace(' ', '_') + '_info.csv'
-    instelling.to_csv(os.path.join('data', filename))
+    instelling.to_csv(os.path.join('data', filename), sep='|', index=False)
 
     # validate results
     if instelling.shape[0] != datapoints_expected:
