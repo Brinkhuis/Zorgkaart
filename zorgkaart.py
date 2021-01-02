@@ -70,8 +70,8 @@ def get_info(organisatietype, reasonable_rate = 3):
             table_row = [zorginstelling, plaats, beoordeling, waarderingen, latitude, longitude, zknl_url]
             instelling = instelling.append(pd.Series(table_row), ignore_index=True)
         
-        #if reasonable_rate:
-        #    sleep(randint(1, reasonable_rate)) 
+        if reasonable_rate:
+            sleep(randint(1, reasonable_rate)) 
 
     # post processing
     instelling.columns = ['zorginstelling', 'plaats', 'beoordeling', 'waarderingen', 'latitude', 'longitude', 'zknl_url']
