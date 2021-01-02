@@ -10,18 +10,19 @@ from tqdm import tqdm
 
 
 def get_types():
-    base_url = 'https://www.zorgkaartnederland.nl/overzicht/organisatietypes'
-    r = requests.get(base_url)
+    base_url = 'https://www.zorgkaartnederland.nl'
+    r = requests.get(base_url + '/overzicht/organisatietypes')
     soup = BeautifulSoup(r.content, 'html.parser')
-    items = soup.find('section', {'class': 'content_section'}).find_all('li')
+        
+    items = soup.find('div', {'class': 'search-list'}).find_all('a', href=True)
     
     organisatietype = [list(item.stripped_strings)[0] for item in items]
-    organisatietype_id = [item.a['href'][1:] for item in items]
-    aantal = [int(list(item.stripped_strings)[1][1:-1]) for item in items]
-     
-    return pd.DataFrame({'organisatietype_id': organisatietype_id,
-                         'organisatietype': organisatietype,
-                         'aantal': aantal}).set_index('organisatietype_id')
+    aantal = [int(item.span.text.strip('()')) for item in items]
+    url = [item['href'] for item in items]
+    
+    return pd.DataFrame({'organisatie': organisatietype,
+                         'aantal': aantal,
+                         'url': url}).set_index('url')
 
 
 def get_typeid(organisatietype):
