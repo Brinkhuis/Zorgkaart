@@ -51,7 +51,7 @@ def get_info(organisatietype, reasonable_rate = 3):
     instelling = pd.DataFrame()
 
     # scrape pages
-    for page in tqdm(range(1, pages + 1)):
+    for page in tqdm(range(1, pages + 1), desc='Webpage'):
         
         r = requests.get(f'{base_url}{url}/pagina{page}')
         soup = BeautifulSoup(r.content, 'html.parser')
@@ -66,26 +66,30 @@ def get_info(organisatietype, reasonable_rate = 3):
             latitude = float(locatie['data-location'].split(',')[0])
             longitude = float(locatie['data-location'].split(',')[1])
             zknl_url = base_url + locatie.a['href']
+            id = zknl_url.split('-')[-1]
             
-            table_row = [zorginstelling, plaats, beoordeling, waarderingen, latitude, longitude, zknl_url]
+            table_row = [id, zorginstelling, plaats, beoordeling, waarderingen, latitude, longitude, zknl_url]
             instelling = instelling.append(pd.Series(table_row), ignore_index=True)
         
         if reasonable_rate:
             sleep(randint(1, reasonable_rate)) 
 
     # post processing
-    instelling.columns = ['zorginstelling', 'plaats', 'beoordeling', 'waarderingen', 'latitude', 'longitude', 'zknl_url']
-    instelling.waarderingen = instelling.waarderingen.astype(float)
+    instelling.columns = ['id', 'zorginstelling', 'plaats', 'beoordeling', 'waarderingen', 'latitude', 'longitude', 'zknl_url']
+    instelling.id = instelling.id.astype(int)
+    instelling.waarderingen = instelling.waarderingen.astype(int)
     instelling.beoordeling.replace('-', np.nan, inplace=True)
     instelling.beoordeling = instelling.beoordeling.astype(float)
     instelling.latitude = instelling.latitude.astype(float)
     instelling.longitude = instelling.longitude.astype(float)
 
+    instelling.set_index('id', inplace=True)
+
     # save data
     if not os.path.isdir('data'):
         os.mkdir('data')
     filename = organisatietype.lower().replace('-', '_').replace(' ', '_') + '_info.csv'
-    instelling.to_csv(os.path.join('data', filename), sep='|', index=False)
+    instelling.to_csv(os.path.join('data', filename), sep='|', index=True)
 
     # validate results
     if instelling.shape[0] != datapoints_expected:
@@ -99,7 +103,7 @@ def read_info(organisatietype):
     filename = organisatietype.lower().replace('-', '_').replace(' ', '_') + '_info.csv'
 
     try:
-        instelling = pd.read_csv(os.path.join('data', filename), index_col='id')
+        instelling = pd.read_csv(os.path.join('data', filename), index_col='id', sep='|')
         return instelling
     except FileNotFoundError as E:
         print(E)
@@ -110,7 +114,6 @@ def get_details(organisatietype, reasonable_rate = 3):
     # set base_url
     base_url = 'https://www.zorgkaartnederland.nl'
     
-    
     # read data
     instelling = read_info(organisatietype)
 
@@ -118,13 +121,13 @@ def get_details(organisatietype, reasonable_rate = 3):
     instelling_details = pd.DataFrame()
     
     # scrape pages
-    for page in tqdm(instelling.zknl_url):
+    for page in tqdm(instelling.zknl_url, desc='Webpage'):
 
         r = requests.get(page)
         soup = BeautifulSoup(r.content, 'html.parser')
         content = soup.body.find('div', {'id': 'body-content'})
         address_rows = content.find_all('div', {'class': 'address_row'})
-
+        
         identifier = int(page.split('-')[-1])
         zorginstelling = soup.title.text.split(' - ')[0]
         adres = address_rows[0].span.text.strip()
@@ -139,7 +142,7 @@ def get_details(organisatietype, reasonable_rate = 3):
             if row[0] == 'Telefoon':
                 telefoon = row[1]
             if row[0] == 'Website':
-                website = row[1]
+                website = row[1].rstrip('/')
         except IndexError:
             pass
         
@@ -148,7 +151,7 @@ def get_details(organisatietype, reasonable_rate = 3):
             if row[0] == 'Telefoon':
                 telefoon = row[1]
             if row[0] == 'Website':
-                website = row[1]
+                website = row[1].rstrip('/')
         except IndexError:
             pass
 
@@ -173,7 +176,7 @@ def get_details(organisatietype, reasonable_rate = 3):
     if not os.path.isdir('data'):
         os.mkdir('data')
     filename = organisatietype.lower().replace('-', '_').replace(' ', '_') + '_details.csv'
-    instelling_details.to_csv(os.path.join('data', filename)) 
+    instelling_details.to_csv(os.path.join('data', filename), sep='|') 
         
     return instelling_details
 
@@ -184,13 +187,13 @@ def merge_datasets(organisatietype, delete=False):
 
     try:
         filename = organisatietype.lower().replace('-', '_').replace(' ', '_') + '_details.csv'
-        dataset_details = pd.read_csv(os.path.join('data', filename), index_col='id')
+        dataset_details = pd.read_csv(os.path.join('data', filename), index_col='id', sep='|')
     except FileNotFoundError as E:
         print(E)
     
     dataset_merged = pd.merge(dataset_info, dataset_details, how='left', on='id')
     
-    dataset = pd.DataFrame({'id': dataset_merged.index, 'zorginstelling': dataset_merged.zorginstelling_y, 'adres': dataset_merged.adres, 'postcode': dataset_merged.postcode, 'plaats': dataset_merged.plaats_y, 'telefoon': dataset_merged.telefoon, 'beoordeling': dataset_merged.beoordeling, 'waarderingen': dataset_merged.waarderingen, 'categorie': dataset_merged.categorie, 'latitude': dataset_merged.latitude, 'longitude': dataset_merged.longitude, 'website': dataset_merged.website, 'zorgkaart_url': dataset_merged.zknl_url, 'wachttijden_url': dataset_merged.wachttijden_url})
+    dataset = pd.DataFrame({'id': dataset_merged.index, 'zorginstelling': dataset_merged.zorginstelling_y, 'adres': dataset_merged.adres, 'postcode': dataset_merged.postcode, 'plaats': dataset_merged.plaats_y, 'telefoon': dataset_merged.telefoon, 'beoordeling': dataset_merged.beoordeling, 'waarderingen': dataset_merged.waarderingen, 'latitude': dataset_merged.latitude, 'longitude': dataset_merged.longitude, 'website': dataset_merged.website, 'zorgkaart_url': dataset_merged.zknl_url, 'wachttijden_url': dataset_merged.wachttijden_url})
     dataset.set_index('id', drop=True, inplace=True, verify_integrity=True)
 
     filename = organisatietype.lower().replace('-', '_').replace(' ', '_') + '.csv'
@@ -218,7 +221,7 @@ def get_wachttijden(organisatietype, reasonable_rate = 3):
     if instelling.shape[0] != 0:
         wachttijden = pd.DataFrame()
     
-        for row in instelling.iterrows():
+        for row in tqdm(instelling.iterrows(), total=instelling.shape[0], desc='Webpage'):
             row_values = row[1]
             r = requests.get(row_values.wachttijden_url)
             soup = BeautifulSoup(r.content, 'html.parser')

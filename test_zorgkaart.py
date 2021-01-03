@@ -1,5 +1,3 @@
-import pandas as pd
-
 import zorgkaart
 
 def test_get_types():
