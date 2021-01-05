@@ -1,0 +1,15 @@
+name: zorgkaart
+channels:
+  - defaults
+dependencies:
+  - python=3.8
+  - notebook
+  - requests
+  - beautifulsoup4
+  - numpy
+  - tqdm
+  - pandas
+  - jupyter
+  - pytest
+  - folium
+prefix: /home/rene/miniconda3/envs/zorgkaart
